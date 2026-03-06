@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 const META_UPDATE_INTERVAL: u64 = 20;
 
 /// Time to wait after SIGTERM before escalating to SIGKILL.
-const SIGKILL_TIMEOUT_MS: u64 = 3000;
+const SIGKILL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
 
 fn codex_bin() -> String {
     std::env::var("CODEX_BIN").unwrap_or_else(|_| "/opt/homebrew/bin/codex".to_string())
@@ -111,7 +111,9 @@ impl TaskRunner {
             use std::os::unix::process::CommandExt;
             unsafe {
                 cmd.pre_exec(|| {
-                    libc::setpgid(0, 0);
+                    if libc::setpgid(0, 0) != 0 {
+                        return Err(std::io::Error::last_os_error());
+                    }
                     Ok(())
                 });
             }
@@ -243,34 +245,49 @@ impl TaskRunner {
     }
 }
 
-/// Graceful shutdown: SIGTERM → wait up to SIGKILL_TIMEOUT_MS → SIGKILL → wait.
+/// Graceful shutdown: SIGTERM → wait up to SIGKILL_TIMEOUT → SIGKILL → wait.
 /// Always reaps the child even on error paths to prevent zombies.
 async fn kill_and_wait(child: &mut Child, pid: Option<u32>) {
+    // If the process already exited (e.g. EOF and cancel raced), skip signalling.
+    match child.try_wait() {
+        Ok(Some(_)) => return, // already reaped
+        Ok(None) => {}         // still running — proceed with shutdown
+        Err(_) => {}           // try_wait failed — proceed anyway, wait() will reap
+    }
+
     #[cfg(unix)]
     if let Some(pid) = pid {
-        // Send SIGTERM to the entire process group
+        // Send SIGTERM to the entire process group.
         unsafe { libc::kill(-(pid as i32), libc::SIGTERM) };
     }
 
-    // Give the process a moment to exit cleanly, then SIGKILL
-    let wait_result = tokio::time::timeout(
-        std::time::Duration::from_millis(SIGKILL_TIMEOUT_MS),
-        child.wait(),
-    )
-    .await;
-
-    if wait_result.is_err() {
-        // Timed out — escalate to SIGKILL
-        #[cfg(unix)]
-        if let Some(pid) = pid {
-            unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+    // Give the process a moment to exit cleanly, then escalate to SIGKILL.
+    match tokio::time::timeout(SIGKILL_TIMEOUT, child.wait()).await {
+        Ok(Ok(_status)) => {
+            // Process exited cleanly within timeout — nothing more to do.
         }
-        // Force kill via tokio handle as fallback
-        child.kill().await.ok();
-        // Final wait to reap zombie
-        child.wait().await.ok();
+        Ok(Err(e)) => {
+            // wait() itself failed — still escalate to SIGKILL to avoid leaving it running.
+            eprintln!("warn: wait() failed during graceful shutdown: {}", e);
+            #[cfg(unix)]
+            if let Some(pid) = pid {
+                unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+            }
+            child.kill().await.ok();
+            child.wait().await.ok();
+        }
+        Err(_elapsed) => {
+            // Timed out — escalate to SIGKILL.
+            #[cfg(unix)]
+            if let Some(pid) = pid {
+                unsafe { libc::kill(-(pid as i32), libc::SIGKILL) };
+            }
+            // Force kill via tokio handle as fallback (handles non-Unix or pgid miss).
+            child.kill().await.ok();
+            // Final wait to reap zombie.
+            child.wait().await.ok();
+        }
     }
-    // If wait_result is Ok (process exited), we're done
 }
 
 fn update_meta_from_event(meta: &mut TaskMeta, event: &CodexEvent) {
