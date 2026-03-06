@@ -1,5 +1,29 @@
 use serde::Deserialize;
 
+#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum Sandbox {
+    ReadOnly,
+    ReadWrite,
+    NetworkReadOnly,
+}
+
+impl Default for Sandbox {
+    fn default() -> Self {
+        Sandbox::ReadOnly
+    }
+}
+
+impl std::fmt::Display for Sandbox {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Sandbox::ReadOnly => write!(f, "read-only"),
+            Sandbox::ReadWrite => write!(f, "read-write"),
+            Sandbox::NetworkReadOnly => write!(f, "network-read-only"),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct TasksConfig {
     pub tasks: Vec<TaskDef>,
@@ -8,23 +32,26 @@ pub struct TasksConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct TaskDef {
     pub name: String,
-    pub cwd: String,
+    pub cwd: std::path::PathBuf,
     pub prompt: String,
-    #[serde(default = "default_sandbox")]
-    pub sandbox: String,
+    #[serde(default)]
+    pub sandbox: Sandbox,
     pub model: Option<String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
-}
-
-fn default_sandbox() -> String {
-    "read-only".to_string()
 }
 
 impl TasksConfig {
     pub fn load(path: &str) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
         let config: TasksConfig = serde_yaml::from_str(&content)?;
+        for task in &config.tasks {
+            anyhow::ensure!(
+                !task.cwd.as_os_str().is_empty(),
+                "task '{}' has empty cwd",
+                task.name
+            );
+        }
         Ok(config)
     }
 
@@ -46,6 +73,24 @@ impl TasksConfig {
             anyhow::ensure!(
                 seen.insert(&task.name),
                 "duplicate task name: '{}'",
+                task.name
+            );
+        }
+
+        // Validate task names are safe file stems (no path separators, not empty)
+        for task in &self.tasks {
+            anyhow::ensure!(
+                !task.name.is_empty(),
+                "task name cannot be empty"
+            );
+            anyhow::ensure!(
+                !task.name.contains('/') && !task.name.contains('\\') && !task.name.contains('\0'),
+                "task name '{}' contains invalid characters (/, \\, or null)",
+                task.name
+            );
+            anyhow::ensure!(
+                task.name != "." && task.name != "..",
+                "task name '{}' is not a valid file stem",
                 task.name
             );
         }
@@ -108,9 +153,9 @@ mod tests {
     fn task(name: &str, depends_on: Vec<&str>) -> TaskDef {
         TaskDef {
             name: name.to_string(),
-            cwd: "/tmp".to_string(),
+            cwd: std::path::PathBuf::from("/tmp"),
             prompt: "test".to_string(),
-            sandbox: "read-only".to_string(),
+            sandbox: Sandbox::default(),
             model: None,
             depends_on: depends_on.into_iter().map(String::from).collect(),
         }
@@ -253,5 +298,44 @@ tasks:
         assert_eq!(waves[1][0].name, "z");
         assert_eq!(waves[1][1].name, "m");
         assert_eq!(waves[1][2].name, "a");
+    }
+
+    #[test]
+    fn empty_name_error() {
+        let config = TasksConfig { tasks: vec![task("", vec![])] };
+        let err = config.into_waves().unwrap_err();
+        assert!(err.to_string().contains("empty"));
+    }
+
+    #[test]
+    fn path_traversal_name_error() {
+        let config = TasksConfig { tasks: vec![task("../evil", vec![])] };
+        let err = config.into_waves().unwrap_err();
+        assert!(err.to_string().contains("invalid characters"));
+    }
+
+    #[test]
+    fn sandbox_deserializes_from_yaml() {
+        let yaml = r#"
+tasks:
+  - name: "x"
+    cwd: "/tmp"
+    prompt: "hello"
+    sandbox: "read-write"
+"#;
+        let config: TasksConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.tasks[0].sandbox, Sandbox::ReadWrite);
+    }
+
+    #[test]
+    fn sandbox_defaults_to_read_only() {
+        let yaml = r#"
+tasks:
+  - name: "x"
+    cwd: "/tmp"
+    prompt: "hello"
+"#;
+        let config: TasksConfig = serde_yaml::from_str(yaml).unwrap();
+        assert_eq!(config.tasks[0].sandbox, Sandbox::ReadOnly);
     }
 }

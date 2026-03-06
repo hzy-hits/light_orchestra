@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
             // Pre-create Pending meta files for all tasks so dashboard shows full pipeline
             for (wave_idx, wave) in waves.iter().enumerate() {
                 for task in wave {
-                    let mut m = meta::TaskMeta::new(&task.name, &task.cwd, &task.prompt);
+                    let mut m = meta::TaskMeta::new(&task.name, &task.cwd.to_string_lossy(), &task.prompt);
                     m.wave = Some(wave_idx as u32);
                     m.status = meta::TaskStatus::Pending;
                     let _ = m.save(&log_dir);
@@ -106,7 +106,7 @@ async fn main() -> anyhow::Result<()> {
                         "skipped: previous wave had failures"
                     };
                     for task in &wave {
-                        let mut m = meta::TaskMeta::new(&task.name, &task.cwd, &task.prompt);
+                        let mut m = meta::TaskMeta::new(&task.name, &task.cwd.to_string_lossy(), &task.prompt);
                         m.wave = Some(wave_idx as u32);
                         m.status = meta::TaskStatus::Cancelled;
                         m.error = Some(reason.into());
