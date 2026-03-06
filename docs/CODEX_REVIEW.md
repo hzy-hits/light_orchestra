@@ -64,7 +64,7 @@
 | 1 | High | JoinError (panic) path doesn't update meta on disk — stale Running state | Track wave task names, post-wave fixup writes Failed meta for unreported tasks |
 | 2 | Medium | stdout-read error overwritten by exit code, reported as Done | Check `meta.error` before overwriting status; propagate error in TaskRunReport |
 | 3 | Medium | Ctrl+C races with EOF in select — completed task misclassified as Cancelled | `biased` select prefers stdout over cancel |
-| 4 | Medium | Dashboard alphabetical sort breaks wave-internal YAML order | Removed alphabetical sort |
+| 4 | Medium | Dashboard alphabetical sort breaks wave-internal YAML order | Removed alphabetical sort (wave-internal order now follows YAML) |
 
 ### Round 3 — Final Review (post-fixes)
 
@@ -72,10 +72,54 @@
 |---|----------|-------|-------------|
 | 1 | High | JoinError synthetic report still doesn't write meta to disk | Added post-wave loop: scan for unreported tasks, load and update their meta files |
 | 2 | Medium | Biased select can starve Ctrl+C on chatty stdout | Added inline `cancel.is_cancelled()` check after each stdout line |
-| 3 | Medium | Dashboard relies on `read_dir()` order which is unspecified | Sort metas by `(wave, name)` for deterministic display |
+| 3 | Medium | Dashboard relies on `read_dir()` order which is unspecified | Sort metas by `(wave, name)` for deterministic cross-wave display (note: display order differs from YAML order) |
 
 ### Final Verification
 
 - 11 unit tests pass (into_waves: no deps, linear chain, diamond, circular, self-dep, unknown dep, duplicates, empty, backward compat, wave-0 order, later-wave order)
 - Release build clean (only pre-existing warnings)
 - Backward compatible: existing YAML without `depends_on` works identically (single wave)
+
+---
+
+## Review 3 — Phase 1 Refactoring (2026-03-07)
+
+**Reviewer:** Codex (via codex-par, parallel review tasks)
+**Scope:** All source files post-merge of refactor/phase1, refactor/typed-config, refactor/split-commands, refactor/test-harness
+**Commits covered:** `d6f09d4` (runner safety hardening), `580ad88` (config hardening), `44ca6cb` + `15e4601` (integration test harness)
+**Also merged:** `refactor/split-commands` — extracted `commands/{run,status,tail,clean}.rs` from `main.rs`; no review findings; `main.rs` now dispatches only
+
+### Runner Safety Findings (commit `d6f09d4`)
+
+| # | Severity | Issue | Fix Applied |
+|---|----------|-------|-------------|
+| 1 | High | `kill_and_wait()` calls SIGTERM without first checking if the process already exited — races with natural exit | Added `try_wait()` before SIGTERM; skip signal if process already done |
+| 2 | Medium | `timeout(SIGKILL_TIMEOUT, wait())` only handled `Ok(status)` — `Ok(Err(io_error))` and `Err(elapsed)` paths unhandled | Match all three cases: success, io error during wait, and timeout elapsed |
+| 3 | Medium | `setpgid(0,0)` failure silently ignored in `pre_exec` | Return error from `pre_exec` closure so spawn propagates the failure |
+
+### Config Hardening Findings (commit `580ad88`)
+
+| # | Severity | Issue | Fix Applied |
+|---|----------|-------|-------------|
+| 1 | High | No task name validation — names with `/`, spaces, control chars, or `..` could cause path traversal or terminal injection | Added strict charset validation: `[A-Za-z0-9._-]` only |
+| 2 | High | `result_file.to_str().unwrap()` panics on non-UTF-8 output paths | Replaced with `.ok_or_else(|| anyhow!(...))` to propagate error |
+| 3 | Medium | Edge cases untested: `.`, `..`, control chars, spaces, unicode | Added test cases for all rejected patterns |
+
+### Integration Test Harness (commits `44ca6cb`, `15e4601`)
+
+| # | Status | Item |
+|---|--------|------|
+| 1 | Implemented | Fake `codex` binary for hermetic integration tests (no network, no real Codex) |
+| 2 | Implemented | `test_single_task_success` — one task completes successfully end-to-end |
+| 3 | Implemented | `test_single_task_failure` — failed task produces correct meta and exit code |
+| 4 | Implemented | `test_wave_skip_on_failure` — downstream wave tasks marked Cancelled when wave fails |
+| 5 | Implemented | `test_wave_sequential_execution` — second task start time ≥ first task end time |
+| 6 | Implemented | `test_rerun_truncates_logs` — log file has exactly 2 lines after rerun |
+| 7 | Implemented | Harness fails hard if fake_codex binary not built (removed SKIP guard) |
+
+### Updated Final Verification
+
+- 18 unit tests pass (11 wave-scheduling + 7 config/validation edge cases)
+- 5 integration tests pass using fake_codex binary
+- Release build clean
+- Backward compatible: existing YAML without `depends_on` runs as single wave

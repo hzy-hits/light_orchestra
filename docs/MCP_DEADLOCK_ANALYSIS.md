@@ -10,7 +10,7 @@ Claude Code calls `mcp__codex__codex` and hangs indefinitely.
 - Latest session JSONL stops being written
 - Codex is not stuck — it's waiting for Claude. Claude is the one hung.
 
-## Root Cause: Half-Duplex Synchronous Blocking
+## Most Likely Root Cause: Half-Duplex Synchronous Blocking (Hypothesis)
 
 ```
 Claude ──request──> Codex MCP Server
@@ -26,7 +26,9 @@ Claude's MCP client implementation:
 1. Sends request to Codex MCP server via stdio
 2. Blocks the calling thread/task waiting for the final response
 3. **Stops processing any inbound messages** during the wait
-4. If Codex needs Claude to respond to a sub-request, progress notification, or heartbeat → both sides deadlock
+4. If Codex sends a **server-initiated request** that needs a reply (e.g. `sampling/createMessage`) → both sides deadlock (neither will yield to let the other proceed)
+   - Note: progress is a one-way *notification* and alone does not cause mutual deadlock — but a full write buffer from accumulated notifications can still block on a full pipe
+   - "Heartbeat" is not a standard MCP term; if a `ping` request/response is required, that too causes deadlock under a half-duplex reader
 
 ## The 4 Common Causes
 
@@ -37,7 +39,7 @@ Claude's MCP client implementation:
 | 3 | Half-duplex implementation | Protocol is full-duplex (JSON-RPC), but implementation only handles one direction at a time |
 | 4 | Pipe buffer exhaustion | stdout/stderr not concurrently drained → OS pipe buffer (4-64KB) fills → child process blocks on write → looks like protocol deadlock |
 
-**Our case is primarily #1**: Codex process is idle waiting for messages, Claude is alive but not pushing new requests. Claude's "wait for response" code is blocking the same path that should be processing inbound messages.
+**Most likely cause in our case is #1**: Codex process is idle waiting for messages, Claude is alive but not pushing new requests. This matches the half-duplex pattern where the "wait for response" code blocks the same path that should process inbound messages. Without a protocol trace or thread dump from the Claude MCP client, this remains a hypothesis — the observed symptoms prove a stalled bidirectional session, not which internal mechanism caused it.
 
 ## Correct Architecture: Actor/Event-Loop Model
 
@@ -85,9 +87,11 @@ let response = rx.await;  // reader task will send response here
 6. **Drain stderr separately** — always, unconditionally
 7. **Timeout + watchdog per request** — safety net for when all else fails
 
-## MCP Serial Execution Evidence
+## Serial Execution and Contention Evidence
 
-Session timeline analysis from 2026-03-06 confirmed serialization:
+*(Separate from the deadlock/hang analysis above — this section covers throughput degradation under the shared MCP server.)*
+
+Session timeline analysis from 2026-03-06 shows heavy contention (note: exact timestamps show some overlap, so this is evidence of *limited concurrency*, not strict serialization):
 
 ```
 06:45 ────────────────────────────────────────────── 11:01
@@ -99,9 +103,11 @@ Session timeline analysis from 2026-03-06 confirmed serialization:
 Tests:                       |x| |x| |x|             10:10-10:18
 ```
 
-- Task #2 waited for #1's time slot even though they're independent
-- Task #3 started only after #2 finished
-- Only independently launched `codex` CLI processes (separate terminals) run truly parallel
+- #2 and #3 overlap with #1, so throughput is not strictly serial — but throughput is far below what independent processes achieve
+- Tasks that should have run in parallel were heavily queued through the shared MCP server
+- Only independently launched `codex` CLI processes (separate terminals) achieved true parallelism
+
+> **Note:** The "confirmed serialization" framing from the original observation may overstate the case; "severe MCP contention / limited concurrency" is a more accurate characterization given the timestamp overlap.
 
 ## Recovery Procedure
 
@@ -126,9 +132,9 @@ Killing only the Codex MCP server doesn't help because Claude is the side that's
 
 | MCP Approach | codex-par Approach |
 |---|---|
-| Bidirectional RPC (deadlock risk) | Unidirectional: spawn → read stdout only |
+| Bidirectional RPC (deadlock risk) | No re-entrant RPC after spawn; parent drains stdout and stderr concurrently; OS signals for cancellation |
 | Synchronous blocking await | Async `tokio::select!` + independent reader tasks |
 | Shared MCP server (serial queue) | Each task is an independent OS process |
 | stdout/stderr may interlock | stderr drained to separate file |
-| No timeout/watchdog | CancellationToken + SIGTERM to process group |
+| No timeout/watchdog | Manual cancellation (Ctrl+C) → SIGTERM → SIGKILL; no automatic per-task timeout yet |
 | No progress visibility | Live JSONL streaming + dashboard |
