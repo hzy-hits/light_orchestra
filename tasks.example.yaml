@@ -1,0 +1,25 @@
+# Codex Parallel Tasks 配置示例
+# 每个 task 会启动一个独立的 codex exec 进程
+
+tasks:
+  - name: "insurance_v2_facade"
+    cwd: "/Users/huangzhenyu/Desktop/02_工作-保险理赔/system_review/lifeevent-insurance"
+    sandbox: "read-only"
+    prompt: |
+      分析 InsuranceFeeCalculatorV2Facade 的 4 层费率调价逻辑，
+      找出计算精度问题和边界条件缺陷。
+      将分析报告以 markdown 格式输出。
+
+  - name: "retry_job_analysis"
+    cwd: "/Users/huangzhenyu/Desktop/02_工作-保险理赔/system_review/lifeevent-insurance"
+    sandbox: "read-only"
+    prompt: |
+      分析 InsureAndClaimFailedRetryJob 的 3 种失败状态恢复路径，
+      重点关注事务安全性和数据一致性风险。
+
+  - name: "bff_judgement"
+    cwd: "/Users/huangzhenyu/Desktop/02_工作-保险理赔/system_review/lifeevent-faas-life/lifeevent-insurance"
+    sandbox: "read-only"
+    prompt: |
+      分析 EffectiveJudgementBiz 的核心业务判断逻辑，
+      找出判断条件遗漏和异常处理缺陷。
