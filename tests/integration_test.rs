@@ -49,15 +49,17 @@ fn run_codex_par(tasks_yaml: &str, dir: &Path) -> (bool, String) {
     let fake_bin = fake_codex_bin();
     let codex_par = codex_par_bin();
 
-    // Ensure the binaries exist; if not, skip gracefully by returning a sentinel
-    if !fake_bin.exists() {
-        eprintln!("SKIP: fake_codex binary not found at {}", fake_bin.display());
-        return (true, "SKIP".to_string());
-    }
-    if !codex_par.exists() {
-        eprintln!("SKIP: codex-par binary not found at {}", codex_par.display());
-        return (true, "SKIP".to_string());
-    }
+    // Binaries must exist — fail hard so missing builds don't silently pass all tests.
+    assert!(
+        fake_bin.exists(),
+        "fake_codex binary not found at {}. Run `cargo build` first.",
+        fake_bin.display()
+    );
+    assert!(
+        codex_par.exists(),
+        "codex-par binary not found at {}. Run `cargo build` first.",
+        codex_par.display()
+    );
 
     let output = Command::new(&codex_par)
         .arg("run")
@@ -106,9 +108,7 @@ tasks:
 "#;
 
     let (ok, stdout) = run_codex_par(yaml, dir);
-    if stdout == "SKIP" {
-        return;
-    }
+
 
     assert!(ok, "expected exit 0 for SUCCEED task; stdout:\n{}", stdout);
 
@@ -142,9 +142,7 @@ tasks:
 "#;
 
     let (ok, stdout) = run_codex_par(yaml, dir);
-    if stdout == "SKIP" {
-        return;
-    }
+
 
     assert!(!ok, "expected exit 1 for FAIL task; stdout:\n{}", stdout);
 
@@ -177,9 +175,7 @@ tasks:
 "#;
 
     let (ok, stdout) = run_codex_par(yaml, dir);
-    if stdout == "SKIP" {
-        return;
-    }
+
 
     assert!(!ok, "expected exit 1 when a wave fails; stdout:\n{}", stdout);
 
@@ -208,11 +204,12 @@ fn test_wave_sequential_execution() {
     let tmp = TempDir::new().unwrap();
     let dir = tmp.path();
 
+    // Use SLOW_SUCCEED for "first" so we can assert ordering via timestamps.
     let yaml = r#"
 tasks:
   - name: "first"
     cwd: "/tmp"
-    prompt: "Please SUCCEED first"
+    prompt: "Please SLOW_SUCCEED first"
   - name: "second"
     cwd: "/tmp"
     prompt: "Please SUCCEED second"
@@ -220,9 +217,6 @@ tasks:
 "#;
 
     let (ok, stdout) = run_codex_par(yaml, dir);
-    if stdout == "SKIP" {
-        return;
-    }
 
     assert!(ok, "expected exit 0 when both waves succeed; stdout:\n{}", stdout);
 
@@ -231,6 +225,16 @@ tasks:
 
     assert_eq!(meta0["status"].as_str().unwrap(), "done", "'first' should be done");
     assert_eq!(meta1["status"].as_str().unwrap(), "done", "'second' should be done");
+
+    // Verify sequential execution: second wave must start after first wave ends.
+    let first_end = meta0["end_time"].as_str().expect("first.end_time missing");
+    let second_start = meta1["start_time"].as_str().expect("second.start_time missing");
+    assert!(
+        second_start >= first_end,
+        "second task start ({}) should be >= first task end ({})",
+        second_start,
+        first_end
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -251,9 +255,7 @@ tasks:
 
     // First run
     let (ok1, stdout1) = run_codex_par(yaml, dir);
-    if stdout1 == "SKIP" {
-        return;
-    }
+
     assert!(ok1, "first run should succeed; stdout:\n{}", stdout1);
 
     let meta_after_first = load_meta(dir, "repeatable");
@@ -274,11 +276,23 @@ tasks:
     // confirming it's a fresh meta and not a stale merged state.
     let t1 = meta_after_first["start_time"].as_str().unwrap();
     let t2 = meta_after_second["start_time"].as_str().unwrap();
-    // Both are ISO8601; lexicographic comparison works for same-timezone strings
     assert!(
         t2 >= t1,
         "second run start_time ({}) should be >= first run start_time ({})",
         t2,
         t1
+    );
+
+    // Verify log truncation: after rerun the .jsonl file should contain exactly
+    // one run's worth of events (fake_codex emits 2 lines: token_count + task_complete).
+    let log_path = dir.join("logs").join("repeatable.jsonl");
+    let log_contents = std::fs::read_to_string(&log_path)
+        .expect("repeatable.jsonl should exist after second run");
+    let line_count = log_contents.lines().count();
+    assert_eq!(
+        line_count, 2,
+        "log should have exactly 2 lines after rerun (got {}); \
+         stale data from first run would produce more",
+        line_count
     );
 }
