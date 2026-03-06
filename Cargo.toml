@@ -3,6 +3,13 @@ name = "codex-par"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "fake_codex"
+path = "tests/fixtures/fake_codex.rs"
+
+[dev-dependencies]
+tempfile = "3"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
