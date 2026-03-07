@@ -2,6 +2,7 @@ mod commands;
 mod config;
 mod dashboard;
 mod event;
+mod execution;
 mod meta;
 mod runner;
 
@@ -51,6 +52,8 @@ enum Commands {
         #[arg(short, long, default_value = ".")]
         dir: String,
     },
+    /// Run as MCP server over stdio (JSON-RPC 2.0)
+    Serve,
 }
 
 #[tokio::main]
@@ -91,6 +94,15 @@ async fn main() -> ExitCode {
         }
         Commands::Clean { dir } => {
             match commands::clean::clean_command(&PathBuf::from(&dir)) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("Error: {:#}", e);
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Commands::Serve => {
+            match commands::serve::serve_command().await {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     eprintln!("Error: {:#}", e);

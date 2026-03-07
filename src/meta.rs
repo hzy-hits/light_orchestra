@@ -2,6 +2,41 @@ use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+// ── Run-level metadata ──────────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RunStatus {
+    Running,
+    Done,
+    Failed,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct RunMeta {
+    pub status: RunStatus,
+    pub task_count: usize,
+    pub wave_count: usize,
+    pub started_at: DateTime<Local>,
+    pub error: Option<String>,
+}
+
+impl RunMeta {
+    /// Atomic save to `{run_dir}/run.meta.json`.
+    pub fn save(&self, run_dir: &Path) -> anyhow::Result<()> {
+        let final_path = run_dir.join("run.meta.json");
+        let tmp_path = run_dir.join("run.meta.json.tmp");
+        std::fs::write(&tmp_path, serde_json::to_string_pretty(self)?)?;
+        std::fs::rename(&tmp_path, &final_path)?;
+        Ok(())
+    }
+
+    pub fn load(run_dir: &Path) -> anyhow::Result<Self> {
+        let content = std::fs::read_to_string(run_dir.join("run.meta.json"))?;
+        Ok(serde_json::from_str(&content)?)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TaskMeta {
     pub name: String,

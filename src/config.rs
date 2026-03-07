@@ -44,7 +44,11 @@ pub struct TaskDef {
 impl TasksConfig {
     pub fn load(path: &str) -> anyhow::Result<Self> {
         let content = std::fs::read_to_string(path)?;
-        let config: TasksConfig = serde_yaml::from_str(&content)?;
+        Self::from_str(&content)
+    }
+
+    pub fn from_str(content: &str) -> anyhow::Result<Self> {
+        let config: TasksConfig = serde_yaml::from_str(content)?;
         for task in &config.tasks {
             anyhow::ensure!(
                 !task.cwd.as_os_str().is_empty(),
