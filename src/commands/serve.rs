@@ -125,21 +125,11 @@ impl CodexParServer {
     async fn start_run(&self, p: Parameters<StartRunParams>) -> Result<CallToolResult, McpError> {
         let p = p.0;
 
+        // Canonicalize early so registry key is stable regardless of trailing slashes etc.
         let run_dir = canonicalize_or_create(&p.run_dir)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
 
-        {
-            let runs = self.state.runs.lock().await;
-            if let Some(active) = runs.get(&run_dir) {
-                if !active.handle.is_finished() {
-                    return Err(McpError::invalid_params(
-                        format!("run_dir {:?} already has an active run; cancel it first", run_dir),
-                        None,
-                    ));
-                }
-            }
-        }
-
+        // Parse and validate YAML before touching disk or locking.
         let tasks_config = config::TasksConfig::from_str(&p.tasks_yaml)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let waves = tasks_config
@@ -151,23 +141,43 @@ impl CodexParServer {
         let log_dir = run_dir.join("logs");
         let out_dir = run_dir.join("outputs");
 
-        if log_dir.exists() {
-            if p.clean {
+        // Hold the runs lock for the entire preflight to eliminate the TOCTOU race:
+        // two concurrent start_run calls for the same run_dir cannot both pass the
+        // duplicate check and then clobber each other's disk state.
+        let mut runs = self.state.runs.lock().await;
+
+        if let Some(active) = runs.get(&run_dir) {
+            if !active.handle.is_finished() {
+                return Err(McpError::invalid_params(
+                    format!("run_dir {:?} already has an active run; cancel it first", run_dir),
+                    None,
+                ));
+            }
+            // Finished run entry: clean it up so we can restart.
+            runs.remove(&run_dir);
+        }
+
+        // Handle clean / reject stale state.
+        if p.clean {
+            if log_dir.exists() {
                 std::fs::remove_dir_all(&log_dir)
                     .map_err(|e| McpError::internal_error(e.to_string(), None))?;
-            } else {
-                let has_stale = std::fs::read_dir(&log_dir)
-                    .map(|d| {
-                        d.filter_map(|e| e.ok())
-                            .any(|e| e.file_name().to_string_lossy().ends_with(".meta.json"))
-                    })
-                    .unwrap_or(false);
-                if has_stale {
-                    return Err(McpError::invalid_params(
-                        "run_dir contains existing task state; pass clean=true to remove it".to_string(),
-                        None,
-                    ));
-                }
+            }
+            if out_dir.exists() {
+                std::fs::remove_dir_all(&out_dir)
+                    .map_err(|e| McpError::internal_error(e.to_string(), None))?;
+            }
+        } else {
+            let has_stale = [&log_dir, &out_dir].iter().any(|dir| {
+                std::fs::read_dir(dir)
+                    .map(|d| d.filter_map(|e| e.ok()).count() > 0)
+                    .unwrap_or(false)
+            });
+            if has_stale {
+                return Err(McpError::invalid_params(
+                    "run_dir contains existing artifacts; pass clean=true to remove them".to_string(),
+                    None,
+                ));
             }
         }
 
@@ -212,7 +222,6 @@ impl CodexParServer {
                 rm.status = if all_ok {
                     meta::RunStatus::Done
                 } else {
-                    // Collect the first failure message from task metas to surface in run.meta.json.
                     rm.error = collect_first_task_error(&log_dir_bg);
                     meta::RunStatus::Failed
                 };
@@ -221,11 +230,9 @@ impl CodexParServer {
             state.runs.lock().await.remove(&run_dir_bg);
         });
 
-        self.state
-            .runs
-            .lock()
-            .await
-            .insert(run_dir.clone(), ActiveRun { cancel, handle });
+        runs.insert(run_dir.clone(), ActiveRun { cancel, handle });
+        // Drop the lock now that the run is registered.
+        drop(runs);
 
         ok_json(&StartRunResult {
             run_dir: run_dir.to_string_lossy().into_owned(),

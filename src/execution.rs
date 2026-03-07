@@ -49,9 +49,17 @@ pub async fn run_waves_quiet(
         while let Some(result) = set.join_next().await {
             match result {
                 Ok(report) => {
-                    if report.status == meta::TaskStatus::Failed {
-                        wave_failed = true;
-                        all_ok = false;
+                    match report.status {
+                        meta::TaskStatus::Failed => {
+                            wave_failed = true;
+                            all_ok = false;
+                        }
+                        // Cancelled counts as non-ok even though it doesn't cause
+                        // downstream waves to skip (cancel token handles that).
+                        meta::TaskStatus::Cancelled => {
+                            all_ok = false;
+                        }
+                        _ => {}
                     }
                     reported.insert(report.name);
                 }
