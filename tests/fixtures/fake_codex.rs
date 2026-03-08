@@ -75,7 +75,10 @@ fn main() {
         // Write a meaningfully large output (~4KB) so chunk tests can exercise offsets.
         let line = "The quick brown fox jumps over the lazy dog. ";
         let content = line.repeat(100); // ~4.5KB
-        println!("{}", r#"{"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":5000,"output_tokens":200}}}}"#);
+        println!(
+            "{}",
+            r#"{"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":5000,"output_tokens":200}}}}"#
+        );
         println!("{}", r#"{"payload":{"type":"task_complete"}}"#);
         if let Some(path) = output_path {
             if let Some(parent) = std::path::Path::new(&path).parent() {
@@ -87,7 +90,10 @@ fn main() {
     }
 
     if succeed {
-        println!("{}", r#"{"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"output_tokens":50}}}}"#);
+        println!(
+            "{}",
+            r#"{"payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":1000,"output_tokens":50}}}}"#
+        );
         println!("{}", r#"{"payload":{"type":"task_complete"}}"#);
         if let Some(path) = output_path {
             if let Some(parent) = std::path::Path::new(&path).parent() {

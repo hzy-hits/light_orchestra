@@ -36,9 +36,29 @@ pub struct TaskDef {
     pub prompt: String,
     #[serde(default)]
     pub sandbox: Sandbox,
+    #[serde(default)]
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub thread_id: Option<String>,
+    #[serde(default)]
+    pub output_schema: Option<std::path::PathBuf>,
+    #[serde(default)]
+    pub ephemeral: bool,
+    #[serde(default)]
+    pub add_dirs: Vec<std::path::PathBuf>,
+    #[serde(default = "default_ask_for_approval")]
+    pub ask_for_approval: String,
+    #[serde(default)]
+    pub config_overrides: Vec<String>,
+    #[serde(default)]
+    pub profile: Option<String>,
     pub model: Option<String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
+}
+
+fn default_ask_for_approval() -> String {
+    "never".to_string()
 }
 
 impl TasksConfig {
@@ -86,13 +106,11 @@ impl TasksConfig {
         // This prevents path separators, control characters, whitespace-only names,
         // terminal escape injection, and case-insensitive filesystem collisions.
         for task in &self.tasks {
-            anyhow::ensure!(
-                !task.name.is_empty(),
-                "task name cannot be empty"
-            );
-            let valid = task.name.chars().all(|c| {
-                c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-'
-            });
+            anyhow::ensure!(!task.name.is_empty(), "task name cannot be empty");
+            let valid = task
+                .name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_' || c == '-');
             anyhow::ensure!(
                 valid,
                 "task name '{}' contains invalid characters (only [A-Za-z0-9._-] are allowed)",
@@ -166,6 +184,14 @@ mod tests {
             cwd: std::path::PathBuf::from("/tmp"),
             prompt: "test".to_string(),
             sandbox: Sandbox::default(),
+            agent_id: None,
+            thread_id: None,
+            output_schema: None,
+            ephemeral: false,
+            add_dirs: Vec::new(),
+            ask_for_approval: "never".to_string(),
+            config_overrides: Vec::new(),
+            profile: None,
             model: None,
             depends_on: depends_on.into_iter().map(String::from).collect(),
         }
@@ -279,11 +305,7 @@ tasks:
     #[test]
     fn preserves_order_within_wave() {
         let config = TasksConfig {
-            tasks: vec![
-                task("z", vec![]),
-                task("m", vec![]),
-                task("a", vec![]),
-            ],
+            tasks: vec![task("z", vec![]), task("m", vec![]), task("a", vec![])],
         };
         let waves = config.into_waves().unwrap();
         assert_eq!(waves[0][0].name, "z");
@@ -312,14 +334,18 @@ tasks:
 
     #[test]
     fn empty_name_error() {
-        let config = TasksConfig { tasks: vec![task("", vec![])] };
+        let config = TasksConfig {
+            tasks: vec![task("", vec![])],
+        };
         let err = config.into_waves().unwrap_err();
         assert!(err.to_string().contains("empty"));
     }
 
     #[test]
     fn path_traversal_name_error() {
-        let config = TasksConfig { tasks: vec![task("../evil", vec![])] };
+        let config = TasksConfig {
+            tasks: vec![task("../evil", vec![])],
+        };
         let err = config.into_waves().unwrap_err();
         assert!(err.to_string().contains("invalid characters"));
     }
@@ -327,10 +353,13 @@ tasks:
     #[test]
     fn dot_and_dotdot_name_error() {
         for name in &[".", ".."] {
-            let config = TasksConfig { tasks: vec![task(name, vec![])] };
+            let config = TasksConfig {
+                tasks: vec![task(name, vec![])],
+            };
             let err = config.into_waves().unwrap_err();
             assert!(
-                err.to_string().contains("invalid characters") || err.to_string().contains("valid file stem"),
+                err.to_string().contains("invalid characters")
+                    || err.to_string().contains("valid file stem"),
                 "unexpected error for name {:?}: {}",
                 name,
                 err
@@ -340,14 +369,18 @@ tasks:
 
     #[test]
     fn control_char_name_error() {
-        let config = TasksConfig { tasks: vec![task("a\nb", vec![])] };
+        let config = TasksConfig {
+            tasks: vec![task("a\nb", vec![])],
+        };
         let err = config.into_waves().unwrap_err();
         assert!(err.to_string().contains("invalid characters"));
     }
 
     #[test]
     fn space_in_name_error() {
-        let config = TasksConfig { tasks: vec![task("my task", vec![])] };
+        let config = TasksConfig {
+            tasks: vec![task("my task", vec![])],
+        };
         let err = config.into_waves().unwrap_err();
         assert!(err.to_string().contains("invalid characters"));
     }

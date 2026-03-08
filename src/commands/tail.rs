@@ -35,6 +35,9 @@ pub async fn tail_follow(log_path: &PathBuf, meta_path: &PathBuf) -> anyhow::Res
         if let Some(evt) = CodexEvent::parse(line) {
             let ts = CodexEvent::extract_timestamp(line);
             match evt {
+                CodexEvent::SessionStart { session_id } => {
+                    println!("[{}] SESSION {}", ts, session_id);
+                }
                 CodexEvent::ReadFile { file_path } => {
                     println!("[{}] READ  {}", ts, file_path);
                 }

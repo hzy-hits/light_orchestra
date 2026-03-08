@@ -23,9 +23,13 @@ pub async fn run_waves_quiet(
                 "skipped: previous wave had failures"
             };
             for task in &wave {
-                let mut m =
-                    meta::TaskMeta::new(&task.name, &task.cwd.to_string_lossy(), &task.prompt);
+                let meta_path = log_dir.join(format!("{}.meta.json", task.name));
+                let mut m = meta::TaskMeta::load(&meta_path).unwrap_or_else(|_| {
+                    meta::TaskMeta::new(&task.name, &task.cwd.to_string_lossy(), &task.prompt)
+                });
                 m.wave = Some(wave_idx as u32);
+                m.agent_id = task.agent_id.clone().unwrap_or_else(|| task.name.clone());
+                m.thread_id = task.thread_id.clone().unwrap_or_else(|| task.name.clone());
                 m.status = meta::TaskStatus::Cancelled;
                 m.error = Some(reason.into());
                 m.end_time = Some(chrono::Local::now());

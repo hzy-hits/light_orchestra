@@ -25,7 +25,11 @@ pub async fn run_command(config_path: &str, base: &Path, show_dashboard: bool) -
         }
     }
 
-    println!("Launching {} tasks in {} wave(s)...\n", total_tasks, waves.len());
+    println!(
+        "Launching {} tasks in {} wave(s)...\n",
+        total_tasks,
+        waves.len()
+    );
 
     // Optionally spawn dashboard.
     let dashboard_handle = if show_dashboard {
@@ -51,7 +55,8 @@ pub async fn run_command(config_path: &str, base: &Path, show_dashboard: bool) -
                 "skipped: previous wave had failures"
             };
             for task in &wave {
-                let mut m = meta::TaskMeta::new(&task.name, &task.cwd.to_string_lossy(), &task.prompt);
+                let mut m =
+                    meta::TaskMeta::new(&task.name, &task.cwd.to_string_lossy(), &task.prompt);
                 m.wave = Some(wave_idx as u32);
                 m.status = meta::TaskStatus::Cancelled;
                 m.error = Some(reason.into());
@@ -156,6 +161,8 @@ pub async fn run_command(config_path: &str, base: &Path, show_dashboard: bool) -
     }
     println!("\n  Results: {}/outputs/*.md", base.display());
 
-    let all_ok = all_reports.iter().all(|r| r.status == meta::TaskStatus::Done);
+    let all_ok = all_reports
+        .iter()
+        .all(|r| r.status == meta::TaskStatus::Done);
     Ok(all_ok)
 }

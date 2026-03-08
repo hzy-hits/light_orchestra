@@ -3,9 +3,19 @@ use serde_json::Value;
 
 #[derive(Debug)]
 pub enum CodexEvent {
-    TokenCount { input_tokens: u64, output_tokens: u64 },
-    ReadFile { file_path: String },
-    ExecCommand { command: String },
+    SessionStart {
+        session_id: String,
+    },
+    TokenCount {
+        input_tokens: u64,
+        output_tokens: u64,
+    },
+    ReadFile {
+        file_path: String,
+    },
+    ExecCommand {
+        command: String,
+    },
     TaskComplete,
     Other(String),
 }
@@ -13,25 +23,39 @@ pub enum CodexEvent {
 impl CodexEvent {
     pub fn parse(line: &str) -> Option<Self> {
         let v: Value = serde_json::from_str(line).ok()?;
+
+        if v.get("type").and_then(|value| value.as_str()) == Some("session_meta") {
+            let session_id = v.pointer("/payload/id")?.as_str()?.to_string();
+            return Some(CodexEvent::SessionStart { session_id });
+        }
+
         let evt_type = v.pointer("/payload/type")?.as_str()?;
 
         Some(match evt_type {
             "token_count" => {
                 let usage = v.pointer("/payload/info/total_token_usage")?;
                 CodexEvent::TokenCount {
-                    input_tokens: usage.get("input_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
-                    output_tokens: usage.get("output_tokens").and_then(|v| v.as_u64()).unwrap_or(0),
+                    input_tokens: usage
+                        .get("input_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0),
+                    output_tokens: usage
+                        .get("output_tokens")
+                        .and_then(|v| v.as_u64())
+                        .unwrap_or(0),
                 }
             }
             "read_file" => {
-                let path = v.pointer("/payload/call/args/file_path")
+                let path = v
+                    .pointer("/payload/call/args/file_path")
                     .and_then(|v| v.as_str())
                     .unwrap_or("?")
                     .to_string();
                 CodexEvent::ReadFile { file_path: path }
             }
             "exec_command" => {
-                let cmd = v.pointer("/payload/call/args/command")
+                let cmd = v
+                    .pointer("/payload/call/args/command")
                     .and_then(|v| v.as_str())
                     .unwrap_or("?")
                     .to_string();

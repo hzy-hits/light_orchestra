@@ -86,8 +86,13 @@ fn run_codex_par(tasks_yaml: &str, dir: &Path) -> (bool, String) {
 
 fn load_meta(dir: &Path, task_name: &str) -> serde_json::Value {
     let path = dir.join("logs").join(format!("{}.meta.json", task_name));
-    let content = std::fs::read_to_string(&path)
-        .unwrap_or_else(|_| panic!("meta.json not found for task '{}' at {}", task_name, path.display()));
+    let content = std::fs::read_to_string(&path).unwrap_or_else(|_| {
+        panic!(
+            "meta.json not found for task '{}' at {}",
+            task_name,
+            path.display()
+        )
+    });
     serde_json::from_str(&content).expect("parse meta.json")
 }
 
@@ -108,7 +113,6 @@ tasks:
 "#;
 
     let (ok, stdout) = run_codex_par(yaml, dir);
-
 
     assert!(ok, "expected exit 0 for SUCCEED task; stdout:\n{}", stdout);
 
@@ -143,7 +147,6 @@ tasks:
 
     let (ok, stdout) = run_codex_par(yaml, dir);
 
-
     assert!(!ok, "expected exit 1 for FAIL task; stdout:\n{}", stdout);
 
     let meta = load_meta(dir, "bad_task");
@@ -176,8 +179,11 @@ tasks:
 
     let (ok, stdout) = run_codex_par(yaml, dir);
 
-
-    assert!(!ok, "expected exit 1 when a wave fails; stdout:\n{}", stdout);
+    assert!(
+        !ok,
+        "expected exit 1 when a wave fails; stdout:\n{}",
+        stdout
+    );
 
     let meta = load_meta(dir, "wave1_task");
     assert_eq!(
@@ -218,17 +224,31 @@ tasks:
 
     let (ok, stdout) = run_codex_par(yaml, dir);
 
-    assert!(ok, "expected exit 0 when both waves succeed; stdout:\n{}", stdout);
+    assert!(
+        ok,
+        "expected exit 0 when both waves succeed; stdout:\n{}",
+        stdout
+    );
 
     let meta0 = load_meta(dir, "first");
     let meta1 = load_meta(dir, "second");
 
-    assert_eq!(meta0["status"].as_str().unwrap(), "done", "'first' should be done");
-    assert_eq!(meta1["status"].as_str().unwrap(), "done", "'second' should be done");
+    assert_eq!(
+        meta0["status"].as_str().unwrap(),
+        "done",
+        "'first' should be done"
+    );
+    assert_eq!(
+        meta1["status"].as_str().unwrap(),
+        "done",
+        "'second' should be done"
+    );
 
     // Verify sequential execution: second wave must start after first wave ends.
     let first_end = meta0["end_time"].as_str().expect("first.end_time missing");
-    let second_start = meta1["start_time"].as_str().expect("second.start_time missing");
+    let second_start = meta1["start_time"]
+        .as_str()
+        .expect("second.start_time missing");
     assert!(
         second_start >= first_end,
         "second task start ({}) should be >= first task end ({})",
@@ -286,8 +306,8 @@ tasks:
     // Verify log truncation: after rerun the .jsonl file should contain exactly
     // one run's worth of events (fake_codex emits 2 lines: token_count + task_complete).
     let log_path = dir.join("logs").join("repeatable.jsonl");
-    let log_contents = std::fs::read_to_string(&log_path)
-        .expect("repeatable.jsonl should exist after second run");
+    let log_contents =
+        std::fs::read_to_string(&log_path).expect("repeatable.jsonl should exist after second run");
     let line_count = log_contents.lines().count();
     assert_eq!(
         line_count, 2,
