@@ -172,7 +172,11 @@ impl TaskRunner {
             cmd.arg("--add-dir");
             cmd.arg(add_dir);
         }
-        cmd.args(["-a", &task.ask_for_approval]);
+        // The codex CLI removed the `-a` flag; use `--full-auto` instead.
+        // --full-auto = auto-approve within sandbox (the -s flag above sets sandbox level).
+        if task.ask_for_approval == "never" || task.ask_for_approval == "auto-edit" {
+            cmd.arg("--full-auto");
+        }
         for kv in &task.config_overrides {
             cmd.args(["-c", kv]);
         }
