@@ -67,7 +67,7 @@ struct StatusResult {
 struct TaskStatusRow {
     name: String,
     status: String,
-    wave: u64,
+    wave: Option<u64>,
     tokens_in: u64,
     tokens_out: u64,
     last_action: String,
@@ -88,6 +88,27 @@ struct ReadChunk {
 #[derive(Debug, Deserialize)]
 struct CancelRunResult {
     state: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct DispatchResult {
+    state: String,
+    task_count: u64,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct WriteFactResult {
+    state: String,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Deserialize)]
+struct FactEntryRow {
+    value: String,
+    artifact_path: Option<String>,
+    updated_at: String,
 }
 
 #[allow(dead_code)]
@@ -467,9 +488,39 @@ impl McpServer {
         )
     }
 
+    fn start_run_with_args(&mut self, arguments: Value) -> StartRunResult {
+        self.call_tool_ok("start_run", arguments, REQUEST_TIMEOUT)
+    }
+
     fn get_status(&mut self, run_dir: &Path) -> StatusResult {
         self.call_tool_ok(
             "get_status",
+            json!({
+                "run_dir": run_dir_string(run_dir),
+            }),
+            REQUEST_TIMEOUT,
+        )
+    }
+
+    fn dispatch_task(&mut self, arguments: Value) -> DispatchResult {
+        self.call_tool_ok("dispatch_task", arguments, REQUEST_TIMEOUT)
+    }
+
+    fn write_fact(&mut self, run_dir: &Path, key: &str, value: &str) -> WriteFactResult {
+        self.call_tool_ok(
+            "write_fact",
+            json!({
+                "run_dir": run_dir_string(run_dir),
+                "key": key,
+                "value": value,
+            }),
+            REQUEST_TIMEOUT,
+        )
+    }
+
+    fn read_facts(&mut self, run_dir: &Path) -> std::collections::BTreeMap<String, FactEntryRow> {
+        self.call_tool_ok(
+            "read_facts",
             json!({
                 "run_dir": run_dir_string(run_dir),
             }),
@@ -1323,7 +1374,7 @@ tasks:
     let waves: Vec<_> = status.tasks.iter().map(|t| t.wave).collect();
 
     assert_eq!(names, vec!["alpha", "zeta", "beta", "mid"]);
-    assert_eq!(waves, vec![0, 0, 1, 1]);
+    assert_eq!(waves, vec![Some(0), Some(0), Some(1), Some(1)]);
 
     let cancel = server.cancel_run(&run_dir);
     assert_eq!(cancel.state, "cancel_requested");
@@ -1373,5 +1424,183 @@ tasks:
         run_meta_text.contains("failed to spawn codex process"),
         "expected run.meta.json to record the fatal pre-task error, got: {}",
         run_meta_text
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Test 15: static run auto-seals when dynamic flag is omitted
+// ---------------------------------------------------------------------------
+
+#[test]
+fn static_run_without_dynamic_flag_auto_seals_and_completes() {
+    let tmp = TempDir::new().unwrap();
+    let mut server = spawn_initialized_server(tmp.path());
+    let run_dir = tmp.path().join("static-run");
+
+    let yaml = r#"
+tasks:
+  - name: "ok"
+    cwd: "/tmp"
+    prompt: "Please SUCCEED"
+"#;
+
+    let started = server.start_run(yaml, &run_dir, false);
+    let terminal = wait_for_status(
+        &mut server,
+        &run_dir,
+        started.poll_interval_ms,
+        RUN_TIMEOUT,
+        |status| status.run_status == "done",
+    );
+
+    assert_eq!(terminal.run_status, "done");
+    assert_eq!(task(&terminal, "ok").status, "done");
+}
+
+// ---------------------------------------------------------------------------
+// Test 16: write_fact + read_facts round-trip during dynamic run
+// ---------------------------------------------------------------------------
+
+#[test]
+fn write_fact_and_read_facts_round_trip_during_dynamic_run() {
+    let tmp = TempDir::new().unwrap();
+    let mut server = spawn_initialized_server(tmp.path());
+    let run_dir = tmp.path().join("dynamic-facts-run");
+
+    let yaml = r#"
+tasks:
+  - name: "seed"
+    cwd: "/tmp"
+    prompt: "Please SUCCEED"
+"#;
+
+    let started = server.start_run_with_args(json!({
+        "tasks_yaml": yaml,
+        "run_dir": run_dir_string(&run_dir),
+        "clean": false,
+        "dynamic": true,
+    }));
+
+    let first = server.write_fact(&run_dir, "model", "o4-mini");
+    assert_eq!(first.state, "written");
+
+    let second = server.write_fact(&run_dir, "repo", "/tmp/myrepo");
+    assert_eq!(second.state, "written");
+
+    let facts = server.read_facts(&run_dir);
+    assert_eq!(facts["model"].value, "o4-mini");
+    assert_eq!(facts["model"].artifact_path, None);
+    assert!(!facts["model"].updated_at.is_empty());
+    assert_eq!(facts["repo"].value, "/tmp/myrepo");
+    assert_eq!(facts["repo"].artifact_path, None);
+    assert!(!facts["repo"].updated_at.is_empty());
+
+    server.seal_dispatch(&run_dir);
+    let terminal =
+        wait_for_run_to_stop(&mut server, &run_dir, started.poll_interval_ms, RUN_TIMEOUT);
+    assert_eq!(terminal.run_status, "done");
+    assert_eq!(task(&terminal, "seed").status, "done");
+}
+
+// ---------------------------------------------------------------------------
+// Test 17: dispatch_task adds a visible task to get_status
+// ---------------------------------------------------------------------------
+
+#[test]
+fn dispatch_task_adds_task_that_is_visible_in_get_status() {
+    let tmp = TempDir::new().unwrap();
+    let mut server = spawn_initialized_server(tmp.path());
+    let run_dir = tmp.path().join("dispatch-run");
+
+    let yaml = r#"
+tasks:
+  - name: "seed"
+    cwd: "/tmp"
+    prompt: "Please SUCCEED"
+"#;
+
+    let started = server.start_run_with_args(json!({
+        "tasks_yaml": yaml,
+        "run_dir": run_dir_string(&run_dir),
+        "clean": false,
+        "dynamic": true,
+    }));
+
+    let dispatched = server.dispatch_task(json!({
+        "run_dir": run_dir_string(&run_dir),
+        "name": "followup",
+        "cwd": "/tmp",
+        "prompt": "Please SUCCEED",
+    }));
+    assert_eq!(dispatched.state, "accepted");
+    assert_eq!(dispatched.task_count, 1);
+
+    let status = server.get_status(&run_dir);
+    let followup = task(&status, "followup");
+    assert!(matches!(
+        followup.status.as_str(),
+        "pending" | "running" | "done"
+    ));
+    assert_eq!(followup.wave, None);
+
+    server.seal_dispatch(&run_dir);
+    let terminal =
+        wait_for_run_to_stop(&mut server, &run_dir, started.poll_interval_ms, RUN_TIMEOUT);
+    assert_eq!(terminal.run_status, "done");
+    assert_eq!(task(&terminal, "seed").status, "done");
+    assert_eq!(task(&terminal, "followup").status, "done");
+}
+
+// ---------------------------------------------------------------------------
+// Test 18: dispatch_task after cancel_run is rejected
+// ---------------------------------------------------------------------------
+
+#[test]
+fn dispatch_task_after_cancel_run_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let mut server = spawn_initialized_server(tmp.path());
+    let run_dir = tmp.path().join("cancelled-run");
+
+    let yaml = r#"
+tasks:
+  - name: "seed"
+    cwd: "/tmp"
+    prompt: "Please SUCCEED"
+"#;
+
+    let started = server.start_run_with_args(json!({
+        "tasks_yaml": yaml,
+        "run_dir": run_dir_string(&run_dir),
+        "clean": false,
+        "dynamic": true,
+    }));
+    assert_eq!(started.task_count, 1);
+
+    let cancel = server.cancel_run(&run_dir);
+    assert_eq!(cancel.state, "cancel_requested");
+
+    let message = server.call_tool_rejection_message(
+        "dispatch_task",
+        json!({
+            "run_dir": run_dir_string(&run_dir),
+            "name": "after-cancel",
+            "cwd": "/tmp",
+            "prompt": "Please SUCCEED",
+        }),
+        REQUEST_TIMEOUT,
+    );
+    let lower = message.to_lowercase();
+    assert!(
+        [
+            "dispatchable",
+            "active run",
+            "cancel",
+            "terminal",
+            "accepted"
+        ]
+        .iter()
+        .any(|needle| lower.contains(needle)),
+        "expected dispatch rejection after cancel_run, got: {}",
+        message
     );
 }

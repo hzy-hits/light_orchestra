@@ -33,6 +33,10 @@ struct StartRunParams {
     /// Remove existing task state in run_dir before starting (default: false)
     #[serde(default)]
     clean: bool,
+    /// If true, keep the dispatch channel open for dispatch_task/dispatch_wave calls.
+    /// If false (default), the run auto-seals after initial tasks complete.
+    #[serde(default)]
+    dynamic: bool,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -103,39 +107,57 @@ struct ListMailboxParams {
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct DispatchTaskParams {
+    /// Base directory passed to start_run
     run_dir: String,
+    /// Task name (must match [A-Za-z0-9._-])
     name: String,
+    /// Working directory for the task
     cwd: String,
+    /// Prompt passed to the task
     prompt: String,
+    /// Sandbox mode: read-only, read-write, or network-read-only
     #[serde(default)]
     sandbox: Option<String>,
+    /// Model override for the task
     #[serde(default)]
     model: Option<String>,
+    /// Accepted task names this task depends on
     #[serde(default)]
     depends_on: Vec<String>,
+    /// Agent identifier recorded in task metadata
     #[serde(default)]
     agent_id: Option<String>,
+    /// Conversation thread identifier recorded in task metadata
     #[serde(default)]
     thread_id: Option<String>,
+    /// Approval policy passed through to Codex
     #[serde(default)]
     ask_for_approval: Option<String>,
+    /// Repeated config overrides passed through to Codex
     #[serde(default)]
     config_overrides: Vec<String>,
+    /// Profile override for the task
     #[serde(default)]
     profile: Option<String>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct DispatchWaveParams {
+    /// Base directory passed to start_run
     run_dir: String,
+    /// Tasks to enqueue together as one dispatch wave
     tasks: Vec<DispatchTaskParams>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 struct WriteFactParams {
+    /// Base directory passed to start_run
     run_dir: String,
+    /// Shared fact key
     key: String,
+    /// Shared fact value
     value: String,
+    /// Optional artifact path associated with the fact
     #[serde(default)]
     artifact_path: Option<String>,
 }
@@ -222,6 +244,7 @@ struct ActiveRun {
     handle: tokio::task::JoinHandle<()>,
     dispatch_tx: tokio::sync::mpsc::Sender<crate::coordinator::DispatchRequest>,
     accepted: std::sync::Arc<tokio::sync::Mutex<std::collections::HashSet<String>>>,
+    facts_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 struct ServerState {
@@ -354,6 +377,7 @@ impl CodexParServer {
         let cancel = CancellationToken::new();
         let (coord, dispatch_tx) =
             crate::coordinator::RunCoordinator::start(&run_dir, runner, cancel.clone());
+        let active_dispatch_tx = dispatch_tx.clone();
         let run_dir_bg = run_dir.clone();
         let state = Arc::clone(&self.state);
 
@@ -378,10 +402,16 @@ impl CodexParServer {
                 handle,
                 dispatch_tx,
                 accepted,
+                facts_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
             },
         );
         // Drop the lock now that the run is registered.
         drop(runs);
+
+        if !p.dynamic {
+            // Static run: seal immediately so coordinator exits when initial tasks finish.
+            let _ = active_dispatch_tx.try_send(crate::coordinator::DispatchRequest::Seal);
+        }
 
         ok_json(&StartRunResult {
             run_dir: run_dir.to_string_lossy().into_owned(),
@@ -616,7 +646,13 @@ impl CodexParServer {
         let run_dir = p.run_dir.clone();
         let task =
             params_to_task_def(p).map_err(|e| McpError::invalid_params(e.to_string(), None))?;
-        let (dispatch_tx, accepted) = active_dispatch_state(&self.state, &run_dir).await?;
+        let (dispatch_tx, accepted, cancel) = active_dispatch_state(&self.state, &run_dir).await?;
+        if cancel.is_cancelled() {
+            return Err(McpError::invalid_params(
+                "run has been cancelled; no new tasks accepted",
+                None,
+            ));
+        }
 
         let mut accepted_guard = accepted.lock().await;
         crate::coordinator::validate_dispatch_name(&task.name, &accepted_guard)
@@ -652,7 +688,13 @@ impl CodexParServer {
             .collect::<Result<Vec<_>>>()
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
         let task_count = tasks.len();
-        let (dispatch_tx, accepted) = active_dispatch_state(&self.state, &run_dir).await?;
+        let (dispatch_tx, accepted, cancel) = active_dispatch_state(&self.state, &run_dir).await?;
+        if cancel.is_cancelled() {
+            return Err(McpError::invalid_params(
+                "run has been cancelled; no new tasks accepted",
+                None,
+            ));
+        }
 
         let mut accepted_guard = accepted.lock().await;
         let batch_names = validate_dispatch_wave_defs(&tasks, &accepted_guard)
@@ -673,7 +715,7 @@ impl CodexParServer {
 
     #[tool(description = "Seal an active run so no more dispatches should be added.")]
     async fn seal_dispatch(&self, p: Parameters<RunDirParam>) -> Result<CallToolResult, McpError> {
-        let (dispatch_tx, _) = active_dispatch_state(&self.state, &p.0.run_dir).await?;
+        let (dispatch_tx, _, _) = active_dispatch_state(&self.state, &p.0.run_dir).await?;
         try_send_dispatch(
             &dispatch_tx,
             crate::coordinator::DispatchRequest::Seal,
@@ -689,8 +731,20 @@ impl CodexParServer {
         let p = p.0;
         ensure_non_empty("key", &p.key)
             .map_err(|e| McpError::invalid_params(e.to_string(), None))?;
+        let run_dir = PathBuf::from(&p.run_dir);
+        let run_dir = run_dir.canonicalize().unwrap_or(run_dir);
+        let facts_lock = {
+            let runs = self.state.runs.lock().await;
+            runs.get(&run_dir)
+                .map(|active| Arc::clone(&active.facts_lock))
+        };
+        let _facts_guard = if let Some(facts_lock) = facts_lock {
+            Some(facts_lock.lock_owned().await)
+        } else {
+            None
+        };
         let artifact_path = p.artifact_path.map(PathBuf::from);
-        FactsStore::new(Path::new(&p.run_dir))
+        FactsStore::new(Path::new(&run_dir))
             .write_fact(&p.key, p.value, artifact_path)
             .map_err(|e| McpError::internal_error(e.to_string(), None))?;
         ok_json(&WriteFactResult {
@@ -846,6 +900,7 @@ async fn active_dispatch_state(
     (
         tokio::sync::mpsc::Sender<crate::coordinator::DispatchRequest>,
         Arc<Mutex<HashSet<String>>>,
+        CancellationToken,
     ),
     McpError,
 > {
@@ -865,7 +920,11 @@ async fn active_dispatch_state(
             None,
         ));
     }
-    Ok((active.dispatch_tx.clone(), Arc::clone(&active.accepted)))
+    Ok((
+        active.dispatch_tx.clone(),
+        Arc::clone(&active.accepted),
+        active.cancel.clone(),
+    ))
 }
 
 fn try_send_dispatch(
@@ -936,10 +995,17 @@ fn dispatch_validation_placeholder(name: String) -> crate::config::TaskDef {
 fn params_to_task_def(p: DispatchTaskParams) -> anyhow::Result<crate::config::TaskDef> {
     use crate::config::{Sandbox, TaskDef};
 
+    anyhow::ensure!(!p.cwd.trim().is_empty(), "cwd cannot be empty");
     let sandbox = match p.sandbox.as_deref().unwrap_or("read-only") {
+        "read-only" => Sandbox::ReadOnly,
         "read-write" => Sandbox::ReadWrite,
         "network-read-only" => Sandbox::NetworkReadOnly,
-        _ => Sandbox::ReadOnly,
+        other => {
+            anyhow::bail!(
+                "unknown sandbox '{}'; use read-only, read-write, or network-read-only",
+                other
+            )
+        }
     };
     Ok(TaskDef {
         name: p.name,
@@ -1204,6 +1270,50 @@ mod tests {
         let p1 = canonicalize_or_create(sub.to_str().unwrap()).unwrap();
         let p2 = canonicalize_or_create(sub.to_str().unwrap()).unwrap();
         assert_eq!(p1, p2);
+    }
+
+    #[test]
+    fn params_to_task_def_rejects_empty_cwd() {
+        let err = params_to_task_def(DispatchTaskParams {
+            run_dir: "/tmp/run".into(),
+            name: "task-a".into(),
+            cwd: "   ".into(),
+            prompt: "do work".into(),
+            sandbox: None,
+            model: None,
+            depends_on: vec![],
+            agent_id: None,
+            thread_id: None,
+            ask_for_approval: None,
+            config_overrides: vec![],
+            profile: None,
+        })
+        .unwrap_err();
+
+        assert!(err.to_string().contains("cwd cannot be empty"));
+    }
+
+    #[test]
+    fn params_to_task_def_rejects_unknown_sandbox() {
+        let err = params_to_task_def(DispatchTaskParams {
+            run_dir: "/tmp/run".into(),
+            name: "task-a".into(),
+            cwd: ".".into(),
+            prompt: "do work".into(),
+            sandbox: Some("nope".into()),
+            model: None,
+            depends_on: vec![],
+            agent_id: None,
+            thread_id: None,
+            ask_for_approval: None,
+            config_overrides: vec![],
+            profile: None,
+        })
+        .unwrap_err();
+
+        assert!(err
+            .to_string()
+            .contains("unknown sandbox 'nope'; use read-only, read-write, or network-read-only"));
     }
 
     #[test]

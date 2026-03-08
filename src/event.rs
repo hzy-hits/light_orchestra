@@ -17,7 +17,7 @@ pub enum CodexEvent {
         command: String,
     },
     TaskComplete,
-    Other(String),
+    Other,
 }
 
 impl CodexEvent {
@@ -62,7 +62,7 @@ impl CodexEvent {
                 CodexEvent::ExecCommand { command: cmd }
             }
             "task_complete" => CodexEvent::TaskComplete,
-            other => CodexEvent::Other(other.to_string()),
+            _ => CodexEvent::Other,
         })
     }
 

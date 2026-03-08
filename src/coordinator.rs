@@ -129,19 +129,31 @@ impl RunCoordinator {
                             } else {
                                 HashSet::new()
                             };
-                            accepted.insert(task.name.clone());
-                            pending.push_back(PendingTask { def: task, barrier });
+                            let newly_accepted_count = usize::from(accept_pending_task(
+                                &mut accepted,
+                                &mut pending,
+                                task,
+                                barrier,
+                                &self.run_dir,
+                                &log_dir,
+                            ));
+                            bump_run_task_count(&self.run_dir, newly_accepted_count);
                         }
                         Some(DispatchRequest::Wave(tasks)) => {
                             let pending_names = pending_names(&pending);
                             let barrier = build_barrier(&running, &pending_names);
+                            let mut newly_accepted_count = 0;
                             for task in tasks {
-                                accepted.insert(task.name.clone());
-                                pending.push_back(PendingTask {
-                                    def: task,
-                                    barrier: barrier.clone(),
-                                });
+                                newly_accepted_count += usize::from(accept_pending_task(
+                                    &mut accepted,
+                                    &mut pending,
+                                    task,
+                                    barrier.clone(),
+                                    &self.run_dir,
+                                    &log_dir,
+                                ));
                             }
+                            bump_run_task_count(&self.run_dir, newly_accepted_count);
                         }
                         Some(DispatchRequest::Seal) | None => {
                             self.dispatch_rx.close();
@@ -237,6 +249,45 @@ fn pending_names(pending: &VecDeque<PendingTask>) -> Vec<String> {
     pending.iter().map(|task| task.def.name.clone()).collect()
 }
 
+fn accept_pending_task(
+    accepted: &mut HashSet<String>,
+    pending: &mut VecDeque<PendingTask>,
+    task: TaskDef,
+    barrier: HashSet<String>,
+    run_dir: &Path,
+    log_dir: &Path,
+) -> bool {
+    if !accepted.insert(task.name.clone()) {
+        return false;
+    }
+
+    let meta = build_pending_meta(run_dir, &task);
+    pending.push_back(PendingTask { def: task, barrier });
+    let _ = meta.save(log_dir);
+    true
+}
+
+fn build_pending_meta(_run_dir: &Path, task: &TaskDef) -> TaskMeta {
+    let mut meta = TaskMeta::new(&task.name, &task.cwd.to_string_lossy(), &task.prompt);
+    meta.status = TaskStatus::Pending;
+    meta.agent_id = task.agent_id.clone().unwrap_or_else(|| task.name.clone());
+    meta.thread_id = task.thread_id.clone().unwrap_or_else(|| task.name.clone());
+    meta.dispatched_at = Some(chrono::Local::now());
+    // TODO: populate run_id here once RunMeta persists it.
+    meta
+}
+
+fn bump_run_task_count(run_dir: &Path, newly_accepted_count: usize) {
+    if newly_accepted_count == 0 {
+        return;
+    }
+
+    if let Ok(mut run_meta) = crate::meta::RunMeta::load(run_dir) {
+        run_meta.task_count += newly_accepted_count;
+        let _ = run_meta.save(run_dir);
+    }
+}
+
 fn write_cancelled_meta(log_dir: &Path, task: &TaskDef, reason: &str) {
     let meta_path = log_dir.join(format!("{}.meta.json", task.name));
     let mut meta = TaskMeta::load(&meta_path)
@@ -256,6 +307,26 @@ fn write_cancelled_meta(log_dir: &Path, task: &TaskDef, reason: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Sandbox;
+
+    fn task(name: &str) -> TaskDef {
+        TaskDef {
+            name: name.to_string(),
+            cwd: PathBuf::from("/tmp"),
+            prompt: "prompt".to_string(),
+            sandbox: Sandbox::default(),
+            agent_id: Some(format!("{name}-agent")),
+            thread_id: Some(format!("{name}-thread")),
+            output_schema: None,
+            ephemeral: false,
+            add_dirs: Vec::new(),
+            ask_for_approval: "never".to_string(),
+            config_overrides: Vec::new(),
+            profile: None,
+            model: None,
+            depends_on: Vec::new(),
+        }
+    }
 
     #[test]
     fn validate_name_rejects_duplicate() {
@@ -288,5 +359,49 @@ mod tests {
         let barrier = build_barrier(&running, &pending_names);
         assert!(barrier.contains("r1"));
         assert!(barrier.contains("p1"));
+    }
+
+    #[test]
+    fn pending_meta_is_written_for_newly_accepted_task() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let log_dir = dir.path().join("logs");
+        std::fs::create_dir_all(&log_dir).unwrap();
+        let mut accepted = HashSet::new();
+        let mut pending = VecDeque::new();
+
+        assert!(accept_pending_task(
+            &mut accepted,
+            &mut pending,
+            task("dynamic-task"),
+            HashSet::new(),
+            dir.path(),
+            &log_dir,
+        ));
+
+        let meta = TaskMeta::load(&log_dir.join("dynamic-task.meta.json")).unwrap();
+        assert_eq!(meta.status, TaskStatus::Pending);
+        assert_eq!(meta.agent_id, "dynamic-task-agent");
+        assert_eq!(meta.thread_id, "dynamic-task-thread");
+        assert!(meta.dispatched_at.is_some());
+        assert!(meta.run_id.is_empty());
+    }
+
+    #[test]
+    fn bump_run_task_count_updates_run_meta() {
+        let dir = tempfile::TempDir::new().unwrap();
+        crate::meta::RunMeta {
+            status: crate::meta::RunStatus::Running,
+            task_count: 2,
+            wave_count: 1,
+            started_at: chrono::Local::now(),
+            error: None,
+        }
+        .save(dir.path())
+        .unwrap();
+
+        bump_run_task_count(dir.path(), 3);
+
+        let run_meta = crate::meta::RunMeta::load(dir.path()).unwrap();
+        assert_eq!(run_meta.task_count, 5);
     }
 }

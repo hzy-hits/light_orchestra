@@ -142,13 +142,6 @@ impl TaskMeta {
         Ok(meta)
     }
 
-    /// Mark task as failed with error info and save immediately.
-    pub fn fail(&mut self, dir: &Path, error: String) {
-        self.status = TaskStatus::Failed;
-        self.error = Some(error);
-        self.end_time = Some(Local::now());
-        let _ = self.save(dir);
-    }
 }
 
 #[cfg(test)]

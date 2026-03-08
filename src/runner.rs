@@ -505,7 +505,7 @@ fn update_meta_from_event(meta: &mut TaskMeta, event: &CodexEvent) {
         CodexEvent::TaskComplete => {
             meta.last_action = "COMPLETED".to_string();
         }
-        CodexEvent::Other(_) => {}
+        CodexEvent::Other => {}
     }
 }
 

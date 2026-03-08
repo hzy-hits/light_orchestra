@@ -50,7 +50,7 @@ pub async fn tail_follow(log_path: &PathBuf, meta_path: &PathBuf) -> anyhow::Res
                 CodexEvent::TaskComplete => {
                     println!("[{}] === TASK COMPLETE ===", ts);
                 }
-                CodexEvent::Other(_) => {}
+                CodexEvent::Other => {}
             }
         }
     }
