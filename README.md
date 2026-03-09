@@ -2,6 +2,12 @@
 
 Run multiple [Codex](https://github.com/openai/codex) tasks in parallel, with dependency waves and a live dashboard. Also ships an MCP server so Claude can dispatch and monitor runs without blocking.
 
+## Architecture
+
+<p align="center">
+  <img src="docs/diagrams/01-system-overview.svg" alt="System Overview" width="100%"/>
+</p>
+
 ## Why
 
 When Claude calls Codex via MCP, all calls serialize — even across multiple team agents sharing one MCP server. A 3-task workload that could finish in 30 minutes takes 90 minutes. There's also a deadlock risk: Claude's MCP client is half-duplex synchronous, so if Codex tries to send a sub-request while Claude is waiting for the response, both sides hang.
@@ -136,16 +142,32 @@ Validation runs before any tasks start: duplicate names, unknown dependencies, c
 
 ## Wave Scheduling
 
+<p align="center">
+  <img src="docs/diagrams/02-wave-scheduling.svg" alt="Wave Scheduling" width="100%"/>
+</p>
+
 Tasks are partitioned into waves using Kahn's topological sort on `depends_on`:
 
 - Wave 0: tasks with no dependencies (all run in parallel)
 - Wave 1: tasks whose dependencies are all in Wave 0 (all run in parallel)
 - Wave N: tasks whose dependencies are all in waves < N
 
-If any task in a wave fails, subsequent waves are skipped (tasks marked `cancelled`).  
+If any task in a wave fails, subsequent waves are skipped (tasks marked `cancelled`).
 Ctrl+C cancels all running tasks and skips remaining waves.
 
+## Task Execution
+
+<p align="center">
+  <img src="docs/diagrams/03-task-execution.svg" alt="Task Execution Flow" width="100%"/>
+</p>
+
+Each task runs as an independent `codex exec --json` process. The runner uses a **biased `select!`** — stdout has priority over cancel to prevent misclassifying completed tasks. An inline `is_cancelled()` check between every stdout line ensures responsive cancellation even for chatty tasks.
+
 ## MCP Server (`serve`)
+
+<p align="center">
+  <img src="docs/diagrams/04-mcp-dynamic-dispatch.svg" alt="MCP Dynamic Dispatch" width="100%"/>
+</p>
 
 `codex-par serve` exposes ten tools over stdio JSON-RPC so Claude can dispatch and extend runs without blocking:
 
@@ -211,6 +233,10 @@ tasks:
 
 ## Output Files
 
+<p align="center">
+  <img src="docs/diagrams/05-file-layout.svg" alt="File Layout" width="100%"/>
+</p>
+
 ```
 outputs/
   {task_name}.md          # Final Codex output (markdown)
@@ -220,6 +246,9 @@ logs/
   {task_name}.meta.json   # Live status: running/done/failed, timing, token counts
   {task_name}.stderr.log  # Codex stderr output
   run.meta.json           # Run-level status (serve mode only)
+
+shared/
+  facts.json              # Shared context store (serve mode only)
 ```
 
 ## Environment Variables

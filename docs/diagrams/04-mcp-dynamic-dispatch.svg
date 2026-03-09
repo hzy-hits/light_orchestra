@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <linearGradient id="bg4" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#1e293b"/></linearGradient>
+    <linearGradient id="amb4" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d97706"/><stop offset="100%" stop-color="#f59e0b"/></linearGradient>
+    <linearGradient id="vio4" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient>
+    <linearGradient id="eme4" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#059669"/><stop offset="100%" stop-color="#34d399"/></linearGradient>
+    <linearGradient id="ind4" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#4338ca"/><stop offset="100%" stop-color="#818cf8"/></linearGradient>
+    <filter id="s4"><feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.35"/></filter>
+    <marker id="m4" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#94a3b8"/></marker>
+    <marker id="m4a" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#f59e0b"/></marker>
+    <marker id="m4v" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#a78bfa"/></marker>
+    <marker id="m4e" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#34d399"/></marker>
+  </defs>
+  <rect width="900" height="540" fill="url(#bg4)" rx="10"/>
+
+  <text x="450" y="32" text-anchor="middle" fill="#f1f5f9" font-size="18" font-weight="700">MCP Server &amp; Dynamic Dispatch</text>
+  <text x="450" y="50" text-anchor="middle" fill="#64748b" font-size="11">codex-par serve — JSON-RPC over stdio · RunCoordinator barrier logic</text>
+
+  <!-- Claude Code -->
+  <rect x="30" y="70" width="180" height="440" rx="10" fill="#1a0f00" stroke="#d97706" stroke-width="1.2" filter="url(#s4)"/>
+  <text x="120" y="95" text-anchor="middle" fill="#fbbf24" font-size="13" font-weight="700">Claude Code</text>
+  <text x="120" y="112" text-anchor="middle" fill="#92400e" font-size="9">MCP Client</text>
+
+  <!-- Sequence steps on Claude side -->
+  <g font-size="9" fill="#fcd34d">
+    <rect x="45" y="130" width="150" height="28" rx="5" fill="#451a03" stroke="#d97706" stroke-width="0.6"/>
+    <text x="120" y="148" text-anchor="middle" font-weight="600">1. start_run(yaml)</text>
+
+    <rect x="45" y="175" width="150" height="28" rx="5" fill="#451a03" stroke="#d97706" stroke-width="0.6"/>
+    <text x="120" y="193" text-anchor="middle" font-weight="600">2. write_fact(k, v)</text>
+
+    <rect x="45" y="225" width="150" height="28" rx="5" fill="#451a03" stroke="#d97706" stroke-width="0.6"/>
+    <text x="120" y="243" text-anchor="middle" font-weight="600">3. dispatch_task(T)</text>
+
+    <rect x="45" y="275" width="150" height="28" rx="5" fill="#451a03" stroke="#d97706" stroke-width="0.6"/>
+    <text x="120" y="293" text-anchor="middle" font-weight="600">4. dispatch_wave([T])</text>
+
+    <rect x="45" y="325" width="150" height="28" rx="5" fill="#451a03" stroke="#d97706" stroke-width="0.6"/>
+    <text x="120" y="343" text-anchor="middle" font-weight="600">5. seal_dispatch</text>
+
+    <rect x="45" y="375" width="150" height="28" rx="5" fill="#451a03" stroke="#d97706" stroke-width="0.6"/>
+    <text x="120" y="393" text-anchor="middle" font-weight="600">6. get_status (poll)</text>
+
+    <rect x="45" y="425" width="150" height="28" rx="5" fill="#451a03" stroke="#d97706" stroke-width="0.6"/>
+    <text x="120" y="443" text-anchor="middle" font-weight="600">7. read_output(name)</text>
+
+    <rect x="45" y="470" width="150" height="28" rx="5" fill="#451a03" stroke="#d97706" stroke-width="0.6"/>
+    <text x="120" y="488" text-anchor="middle" font-weight="600">8. resume_agent(name)</text>
+  </g>
+
+  <!-- MCP Server -->
+  <rect x="240" y="70" width="200" height="440" rx="10" fill="#1e1b4b" stroke="#6366f1" stroke-width="1.2" filter="url(#s4)"/>
+  <text x="340" y="95" text-anchor="middle" fill="#c4b5fd" font-size="13" font-weight="700">MCP Server</text>
+  <text x="340" y="112" text-anchor="middle" fill="#6b7280" font-size="9">serve.rs (rmcp)</text>
+
+  <!-- Arrows from Claude to MCP -->
+  <line x1="195" y1="144" x2="247" y2="144" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m4a)"/>
+  <line x1="195" y1="189" x2="247" y2="189" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m4a)"/>
+  <line x1="195" y1="239" x2="247" y2="239" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m4a)"/>
+  <line x1="195" y1="289" x2="247" y2="289" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m4a)"/>
+  <line x1="195" y1="339" x2="247" y2="339" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m4a)"/>
+  <line x1="195" y1="389" x2="247" y2="389" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m4a)"/>
+  <line x1="195" y1="439" x2="247" y2="439" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m4a)"/>
+  <line x1="195" y1="484" x2="247" y2="484" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#m4a)"/>
+
+  <!-- MCP internal actions -->
+  <g font-size="8" fill="#a5b4fc">
+    <text x="255" y="148" fill="#94a3b8">parse YAML, spawn</text>
+    <text x="255" y="158" fill="#94a3b8">RunCoordinator</text>
+    <text x="255" y="193" fill="#94a3b8">→ shared/facts.json</text>
+    <text x="255" y="203" fill="#94a3b8">→ preamble injection</text>
+    <text x="255" y="243" fill="#94a3b8">validate, build barrier</text>
+    <text x="255" y="253" fill="#94a3b8">→ dispatch channel</text>
+    <text x="255" y="293" fill="#94a3b8">validate batch, Kahn's</text>
+    <text x="255" y="303" fill="#94a3b8">→ dispatch channel</text>
+    <text x="255" y="343" fill="#94a3b8">close channel</text>
+    <text x="255" y="393" fill="#94a3b8">read meta files</text>
+    <text x="255" y="443" fill="#94a3b8">read outputs/*.md</text>
+    <text x="255" y="488" fill="#94a3b8">spawn resume task</text>
+  </g>
+
+  <!-- dispatch channel arrow to coordinator -->
+  <line x1="440" y1="260" x2="475" y2="260" stroke="#a78bfa" stroke-width="2" marker-end="url(#m4v)"/>
+  <text x="458" y="252" fill="#a78bfa" font-size="8">mpsc(256)</text>
+
+  <!-- RunCoordinator -->
+  <rect x="475" y="70" width="395" height="300" rx="10" fill="#0c1222" stroke="#7c3aed" stroke-width="1.2" filter="url(#s4)"/>
+  <text x="672" y="95" text-anchor="middle" fill="#e9d5ff" font-size="13" font-weight="700">RunCoordinator</text>
+  <text x="672" y="112" text-anchor="middle" fill="#6b7280" font-size="9">coordinator.rs — event loop on dispatch channel</text>
+
+  <!-- State boxes -->
+  <rect x="495" y="125" width="160" height="70" rx="6" fill="#1e1b4b" stroke="#4338ca" stroke-width="0.8"/>
+  <text x="575" y="142" text-anchor="middle" fill="#c4b5fd" font-size="10" font-weight="600">Pending Queue</text>
+  <text x="575" y="157" text-anchor="middle" fill="#94a3b8" font-size="8">VecDeque&lt;PendingTask&gt;</text>
+  <text x="575" y="172" text-anchor="middle" fill="#94a3b8" font-size="8">each has barrier set</text>
+  <text x="575" y="187" text-anchor="middle" fill="#6b7280" font-size="7">barrier = snapshot(running ∪ pending)</text>
+
+  <rect x="680" y="125" width="170" height="70" rx="6" fill="#1e1b4b" stroke="#4338ca" stroke-width="0.8"/>
+  <text x="765" y="142" text-anchor="middle" fill="#c4b5fd" font-size="10" font-weight="600">Active State</text>
+  <text x="765" y="160" text-anchor="middle" fill="#94a3b8" font-size="8">running: HashSet&lt;String&gt;</text>
+  <text x="765" y="175" text-anchor="middle" fill="#94a3b8" font-size="8">completed: HashSet&lt;String&gt;</text>
+  <text x="765" y="190" text-anchor="middle" fill="#94a3b8" font-size="8">accepted: HashSet&lt;String&gt;</text>
+
+  <!-- Unblock logic -->
+  <rect x="495" y="210" width="355" height="55" rx="6" fill="#064e3b" stroke="#059669" stroke-width="0.8"/>
+  <text x="672" y="230" text-anchor="middle" fill="#6ee7b7" font-size="11" font-weight="600">Unblock Check (on every task completion)</text>
+  <text x="672" y="248" text-anchor="middle" fill="#94a3b8" font-size="9">task ready = (barrier ⊆ completed) AND (depends_on ⊆ completed)</text>
+  <text x="672" y="260" text-anchor="middle" fill="#6b7280" font-size="8">Ready tasks → JoinSet::spawn(TaskRunner::run_task)</text>
+
+  <!-- JoinSet -->
+  <rect x="495" y="280" width="355" height="35" rx="6" fill="#1a1a2e" stroke="#6366f1" stroke-width="0.8"/>
+  <text x="672" y="302" text-anchor="middle" fill="#a5b4fc" font-size="10" font-weight="600">JoinSet — parallel task execution</text>
+
+  <!-- Codex processes -->
+  <line x1="672" y1="315" x2="672" y2="340" stroke="#34d399" stroke-width="1.8" marker-end="url(#m4e)"/>
+
+  <rect x="475" y="395" width="395" height="115" rx="10" fill="#0f172a" stroke="#334155" stroke-width="1" filter="url(#s4)"/>
+  <text x="672" y="418" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="700">Preamble Injection (facts.rs)</text>
+  <rect x="495" y="430" width="355" height="65" rx="6" fill="#082f49" stroke="#0369a1" stroke-width="0.6"/>
+  <text x="510" y="447" fill="#7dd3fc" font-size="9" font-style="italic">=== Shared Context ===</text>
+  <text x="510" y="462" fill="#94a3b8" font-size="9">analysis_scope: Review all .rs files in src/</text>
+  <text x="510" y="477" fill="#94a3b8" font-size="9">coding_standard: Follow Rust 2021 idioms [artifact: std.md]</text>
+  <text x="510" y="490" fill="#7dd3fc" font-size="9" font-style="italic">======================</text>
+  <text x="672" y="505" text-anchor="middle" fill="#6b7280" font-size="8">Max 1KB/value, 4KB total — prepended to each task prompt</text>
+
+  <!-- Codex boxes under coordinator -->
+  <g font-size="9">
+    <rect x="490" y="342" width="110" height="28" rx="5" fill="url(#eme4)" opacity="0.85"/>
+    <text x="545" y="360" text-anchor="middle" fill="#fff" font-weight="600">codex exec A</text>
+    <rect x="610" y="342" width="110" height="28" rx="5" fill="url(#eme4)" opacity="0.85"/>
+    <text x="665" y="360" text-anchor="middle" fill="#fff" font-weight="600">codex exec B</text>
+    <rect x="730" y="342" width="125" height="28" rx="5" fill="url(#eme4)" opacity="0.85"/>
+    <text x="792" y="360" text-anchor="middle" fill="#fff" font-weight="600">codex review C</text>
+  </g>
+</svg>

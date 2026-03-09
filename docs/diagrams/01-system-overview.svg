@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 520" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#0f172a"/><stop offset="100%" stop-color="#1e293b"/></linearGradient>
+    <linearGradient id="amber" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#d97706"/><stop offset="100%" stop-color="#f59e0b"/></linearGradient>
+    <linearGradient id="violet" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#7c3aed"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient>
+    <linearGradient id="emerald" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#059669"/><stop offset="100%" stop-color="#34d399"/></linearGradient>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0369a1"/><stop offset="100%" stop-color="#38bdf8"/></linearGradient>
+    <linearGradient id="rose" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#be185d"/><stop offset="100%" stop-color="#f472b6"/></linearGradient>
+    <filter id="sh"><feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.35"/></filter>
+    <marker id="a" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#94a3b8"/></marker>
+    <marker id="aA" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#f59e0b"/></marker>
+    <marker id="aV" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#a78bfa"/></marker>
+    <marker id="aE" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#34d399"/></marker>
+    <marker id="aS" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#38bdf8"/></marker>
+    <marker id="aR" viewBox="0 0 10 7" refX="10" refY="3.5" markerWidth="8" markerHeight="6" orient="auto"><polygon points="0 0,10 3.5,0 7" fill="#f472b6"/></marker>
+  </defs>
+  <rect width="900" height="520" fill="url(#bg)" rx="10"/>
+
+  <!-- Title -->
+  <text x="450" y="32" text-anchor="middle" fill="#f1f5f9" font-size="18" font-weight="700">System Overview</text>
+  <text x="450" y="50" text-anchor="middle" fill="#64748b" font-size="11">Two entry paths: CLI (static waves) and MCP Server (dynamic dispatch)</text>
+
+  <!-- Claude Code -->
+  <rect x="335" y="65" width="230" height="50" rx="12" fill="url(#amber)" filter="url(#sh)"/>
+  <text x="450" y="90" text-anchor="middle" fill="#1e1b4b" font-size="14" font-weight="700">Claude Code / User</text>
+  <text x="450" y="104" text-anchor="middle" fill="#451a03" font-size="9">IDE · CLI · Orchestrator</text>
+
+  <!-- Branches -->
+  <line x1="380" y1="115" x2="220" y2="165" stroke="#f59e0b" stroke-width="2" marker-end="url(#aA)" stroke-dasharray="5,3"/>
+  <text x="275" y="138" fill="#fbbf24" font-size="10" font-weight="600" transform="rotate(-14,275,138)">CLI</text>
+  <line x1="520" y1="115" x2="680" y2="165" stroke="#f59e0b" stroke-width="2" marker-end="url(#aA)" stroke-dasharray="5,3"/>
+  <text x="620" y="138" fill="#fbbf24" font-size="10" font-weight="600" transform="rotate(14,620,138)">MCP stdio</text>
+
+  <!-- CLI Box -->
+  <rect x="60" y="165" width="320" height="60" rx="10" fill="#1e1b4b" stroke="#6366f1" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="220" y="188" text-anchor="middle" fill="#c4b5fd" font-size="12" font-weight="700">CLI Subcommands</text>
+  <g font-size="10" fill="#a5b4fc" font-weight="600">
+    <rect x="80" y="198" width="55" height="20" rx="5" fill="url(#violet)" opacity="0.85"/><text x="107" y="212" text-anchor="middle" fill="#fff">run</text>
+    <rect x="142" y="198" width="55" height="20" rx="5" fill="url(#violet)" opacity="0.85"/><text x="169" y="212" text-anchor="middle" fill="#fff">status</text>
+    <rect x="204" y="198" width="55" height="20" rx="5" fill="url(#violet)" opacity="0.85"/><text x="231" y="212" text-anchor="middle" fill="#fff">tail</text>
+    <rect x="266" y="198" width="55" height="20" rx="5" fill="url(#violet)" opacity="0.85"/><text x="293" y="212" text-anchor="middle" fill="#fff">clean</text>
+  </g>
+
+  <!-- MCP Box -->
+  <rect x="520" y="165" width="320" height="60" rx="10" fill="#1e1b4b" stroke="#6366f1" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="680" y="188" text-anchor="middle" fill="#c4b5fd" font-size="12" font-weight="700">MCP Server (serve)</text>
+  <text x="680" y="215" text-anchor="middle" fill="#94a3b8" font-size="9">start_run · dispatch_task · dispatch_wave · seal_dispatch</text>
+  <text x="680" y="220" text-anchor="middle" fill="#94a3b8" font-size="8"> </text>
+
+  <!-- Config + Wave Scheduler -->
+  <line x1="220" y1="225" x2="350" y2="265" stroke="#a78bfa" stroke-width="1.8" marker-end="url(#aV)"/>
+  <text x="260" y="248" fill="#a78bfa" font-size="9" transform="rotate(20,260,248)">tasks.yaml</text>
+  <line x1="680" y1="225" x2="550" y2="265" stroke="#a78bfa" stroke-width="1.8" marker-end="url(#aV)" stroke-dasharray="5,3"/>
+
+  <rect x="260" y="265" width="380" height="50" rx="10" fill="#1a1a2e" stroke="#6366f1" stroke-width="1" filter="url(#sh)"/>
+  <text x="450" y="287" text-anchor="middle" fill="#e0e7ff" font-size="12" font-weight="700">Config Parser + Wave Scheduler</text>
+  <text x="450" y="303" text-anchor="middle" fill="#64748b" font-size="9">Kahn's topological sort · DAG → Vec&lt;Vec&lt;TaskDef&gt;&gt;</text>
+
+  <!-- Execution -->
+  <line x1="450" y1="315" x2="450" y2="345" stroke="#a78bfa" stroke-width="1.8" marker-end="url(#aV)"/>
+  <rect x="150" y="345" width="600" height="55" rx="10" fill="#0c1222" stroke="#7c3aed" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="450" y="367" text-anchor="middle" fill="#e9d5ff" font-size="12" font-weight="700">Execution Engine (tokio JoinSet per wave)</text>
+  <g font-size="9">
+    <rect x="175" y="376" width="110" height="18" rx="4" fill="url(#emerald)" opacity="0.8"/><text x="230" y="389" text-anchor="middle" fill="#fff" font-weight="600">TaskRunner A</text>
+    <rect x="295" y="376" width="110" height="18" rx="4" fill="url(#emerald)" opacity="0.8"/><text x="350" y="389" text-anchor="middle" fill="#fff" font-weight="600">TaskRunner B</text>
+    <rect x="415" y="376" width="110" height="18" rx="4" fill="url(#emerald)" opacity="0.8"/><text x="470" y="389" text-anchor="middle" fill="#fff" font-weight="600">TaskRunner C</text>
+    <text x="545" y="389" fill="#94a3b8">→ next wave →</text>
+    <rect x="630" y="376" width="100" height="18" rx="4" fill="url(#emerald)" opacity="0.7"/><text x="680" y="389" text-anchor="middle" fill="#fff" font-weight="600">TaskRunner D</text>
+  </g>
+
+  <!-- Codex CLI -->
+  <line x1="450" y1="400" x2="450" y2="425" stroke="#34d399" stroke-width="1.8" marker-end="url(#aE)"/>
+  <rect x="200" y="425" width="500" height="35" rx="10" fill="#052e16" stroke="#059669" stroke-width="1.2" filter="url(#sh)"/>
+  <text x="450" y="447" text-anchor="middle" fill="#a7f3d0" font-size="12" font-weight="700">Codex CLI Processes (codex exec --json)</text>
+
+  <!-- File System -->
+  <line x1="450" y1="460" x2="450" y2="478" stroke="#38bdf8" stroke-width="1.8" marker-end="url(#aS)"/>
+  <rect x="120" y="478" width="660" height="32" rx="8" fill="#0c1a2e" stroke="#0369a1" stroke-width="1" filter="url(#sh)"/>
+  <g font-size="10" fill="#7dd3fc" font-weight="600">
+    <text x="200" y="499" text-anchor="middle">outputs/*.md</text>
+    <text x="370" y="499" text-anchor="middle">logs/*.meta.json</text>
+    <text x="530" y="499" text-anchor="middle">logs/*.jsonl</text>
+    <text x="690" y="499" text-anchor="middle">shared/facts.json</text>
+  </g>
+
+  <!-- Feedback arrows -->
+  <path d="M120,494 Q60,400 60,290 Q60,188 80,188" stroke="#f472b6" stroke-width="1.5" fill="none" marker-end="url(#aR)" stroke-dasharray="4,3"/>
+  <text x="38" y="340" fill="#f472b6" font-size="8" transform="rotate(-90,38,340)">dashboard reads meta</text>
+
+  <path d="M780,494 Q840,400 840,290 Q840,188 820,188" stroke="#f472b6" stroke-width="1.5" fill="none" marker-end="url(#aR)" stroke-dasharray="4,3"/>
+  <text x="862" y="340" fill="#f472b6" font-size="8" transform="rotate(90,862,340)">get_status polls meta</text>
+</svg>
